@@ -176,7 +176,7 @@ class HTTPStream:
                 and self.scope["http_version"] in EARLY_HINTS_VERSIONS
                 and self.state == ASGIHTTPState.REQUEST
             ):
-                headers = [(b"link", bytes(link).strip()) for link in message["links"]]
+                headers = build_and_validate_headers([(b"link", link) for link in message["links"]])
                 await self.send(
                     InformationalResponse(
                         stream_id=self.stream_id,

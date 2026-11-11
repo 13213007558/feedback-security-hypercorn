@@ -68,6 +68,29 @@ def test_build_and_validate_headers_pseudo() -> None:
         build_and_validate_headers([(b":authority", b"quart")])
 
 
+@pytest.mark.parametrize(
+    "headers",
+    [
+        [(b"name", b"value\r\ninjected: true")],
+        [(b"name", b"value\rinjected")],
+        [(b"name", b"value\ninjected")],
+        [(b"name", b"value\x00injected")],
+        [(b"na\r\nme", b"value")],
+        [(b"na\nme", b"value")],
+        [(b"na\x00me", b"value")],
+    ],
+)
+def test_build_and_validate_headers_invalid_characters(
+    headers: list[tuple[bytes, bytes]],
+) -> None:
+    with pytest.raises(ValueError):
+        build_and_validate_headers(headers)
+
+
+def test_build_and_validate_headers_strips_whitespace() -> None:
+    assert build_and_validate_headers([(b"  name\t", b"\tvalue  ")]) == [(b"name", b"value")]
+
+
 def test_filter_pseudo_headers() -> None:
     result = filter_pseudo_headers(
         [(b":authority", b"quart"), (b":path", b"/"), (b"user-agent", b"something")]

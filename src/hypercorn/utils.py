@@ -59,7 +59,14 @@ def build_and_validate_headers(headers: Iterable[tuple[bytes, bytes]]) -> list[t
     for name, value in headers:
         if name[0] == b":"[0]:
             raise ValueError("Pseudo headers are not valid")
-        validated_headers.append((bytes(name).strip(), bytes(value).strip()))
+        validated_name = bytes(name).strip()
+        validated_value = bytes(value).strip()
+        for char in (b"\x00", b"\r", b"\n"):
+            if char in validated_name:
+                raise ValueError(f"Invalid character {char!r} in header name {validated_name!r}")
+            elif char in validated_value:
+                raise ValueError(f"Invalid character {char!r} in header value {validated_value!r}")
+        validated_headers.append((validated_name, validated_value))
     return validated_headers
 
 

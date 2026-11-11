@@ -239,6 +239,25 @@ async def test_send_early_hint(stream: HTTPStream, http_scope: HTTPScope) -> Non
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "links",
+    [
+        [b'</style.css>\r\nx-evil: injected'],
+        [b'</style.css>\nx-evil: injected'],
+        [b'</style.css>\x00x-evil'],
+    ],
+)
+async def test_send_early_hint_invalid_link(
+    stream: HTTPStream, http_scope: HTTPScope, links: list[bytes]
+) -> None:
+    stream.scope = http_scope
+    stream.stream_id = 1
+    with pytest.raises(ValueError):
+        await stream.app_send({"type": "http.response.early_hint", "links": links})
+    stream.send.assert_not_called()  # type: ignore
+
+
+@pytest.mark.asyncio
 async def test_send_trailers(stream: HTTPStream) -> None:
     await stream.handle(
         Request(
