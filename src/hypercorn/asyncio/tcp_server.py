@@ -10,7 +10,8 @@ from .worker_context import AsyncioSingleTask, WorkerContext
 from ..config import Config
 from ..events import Closed, Event, RawData, Updated
 from ..protocol import ProtocolWrapper
-from ..typing import AppWrapper, ConnectionState, LifespanState
+from ..protocol.tls import build_tls_extension, no_tls_extension
+from ..typing import AppWrapper, ConnectionState, LifespanState, TLSExtension
 from ..utils import parse_socket_addr
 
 MAX_RECV = 2**16
@@ -49,9 +50,11 @@ class TCPServer:
             ssl_object = self.writer.get_extra_info("ssl_object")
             if ssl_object is not None:
                 ssl = True
+                tls_extension: TLSExtension = build_tls_extension(ssl_object)
                 alpn_protocol = ssl_object.selected_alpn_protocol()
             else:
                 ssl = False
+                tls_extension = no_tls_extension()
                 alpn_protocol = "http/1.1"
 
             async with TaskGroup(self.loop) as task_group:
@@ -67,6 +70,7 @@ class TCPServer:
                     server,
                     self.protocol_send,
                     alpn_protocol,
+                    tls_extension,
                 )
                 await self.protocol.initiate()
                 await self.idle_task.restart(task_group, self._idle_timeout)

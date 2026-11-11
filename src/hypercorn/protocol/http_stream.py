@@ -15,6 +15,7 @@ from .events import (
     StreamClosed,
     Trailers,
 )
+from .tls import no_tls_extension
 from ..config import Config
 from ..typing import (
     AppWrapper,
@@ -22,6 +23,7 @@ from ..typing import (
     HTTPResponseStartEvent,
     HTTPScope,
     TaskGroup,
+    TLSExtension,
     WorkerContext,
 )
 from ..utils import (
@@ -58,6 +60,7 @@ class HTTPStream:
         server: tuple[str, int] | None,
         send: Callable[[Event], Awaitable[None]],
         stream_id: int,
+        tls_extension: TLSExtension | None = None,
     ) -> None:
         self.app = app
         self.client = client
@@ -73,6 +76,7 @@ class HTTPStream:
         self.state = ASGIHTTPState.REQUEST
         self.stream_id = stream_id
         self.task_group = task_group
+        self.tls_extension = tls_extension if tls_extension is not None else no_tls_extension()
 
     @property
     def idle(self) -> bool:
@@ -98,7 +102,7 @@ class HTTPStream:
                 "client": self.client,
                 "server": self.server,
                 "state": event.state.copy(),  # type: ignore[typeddict-item]
-                "extensions": {},
+                "extensions": {"tls": self.tls_extension},
             }
 
             if event.http_version in TRAILERS_VERSIONS:

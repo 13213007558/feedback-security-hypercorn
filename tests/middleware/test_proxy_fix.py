@@ -71,3 +71,40 @@ async def test_proxy_fix_modern() -> None:
     assert scope["scheme"] == "https"
     host_headers = [h for h in scope["headers"] if h[0].lower() == b"host"]
     assert host_headers == [(b"host", b"example.com")]
+
+
+@pytest.mark.asyncio
+async def test_proxy_fix_preserves_tls_extension() -> None:
+    mock = AsyncMock()
+    app = ProxyFixMiddleware(mock)
+    tls_extension = {
+        "tls": True,
+        "client_cert": b"0\x82der",
+        "client_cert_name": "CN=client-001,O=Example,C=UK",
+    }
+    scope: HTTPScope = {
+        "type": "http",
+        "asgi": {},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "https",
+        "path": "/",
+        "raw_path": b"/",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"x-forwarded-proto", b"http"),
+            (b"x-ssl-client-cert", b"CN=forged"),
+        ],
+        "client": ("127.0.0.1", 80),
+        "server": None,
+        "extensions": {"tls": tls_extension},
+        "state": ConnectionState({}),
+    }
+    await app(scope, None, None)
+    forwarded_scope = mock.call_args[0][0]
+    # Transport-derived data is preserved verbatim and not derived from headers.
+    assert forwarded_scope["extensions"]["tls"] == tls_extension
+    assert forwarded_scope["extensions"]["tls"]["client_cert_name"] == (
+        "CN=client-001,O=Example,C=UK"
+    )

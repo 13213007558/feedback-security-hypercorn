@@ -1,3 +1,12 @@
+Unreleased
+----------
+
+* Expose the ASGI ``tls`` extension (``scope["extensions"]["tls"]``) for
+  HTTP and WebSocket requests, sourced from the actual TLS transport for
+  both asyncio and trio workers. It distinguishes plaintext, TLS without a
+  usable client certificate, and a certificate verified against the
+  configured chain of trust, and cannot be overridden by request headers.
+
 0.18.0 2025-11-08
 -----------------
 

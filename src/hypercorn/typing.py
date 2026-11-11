@@ -29,6 +29,21 @@ class ASGIVersions(TypedDict, total=False):
     version: Literal["2.0"] | Literal["3.0"]
 
 
+# A DER encoded X.509 certificate, as exposed by the ASGI ``tls`` extension.
+X509Certificate = bytes
+
+
+class TLSExtension(TypedDict, total=False):
+    # Value of the ``extensions["tls"]`` entry. ``tls`` is always present and
+    # reports whether the connection is actually TLS, independent of any
+    # client supplied request headers.
+    tls: bool
+    server_cert: X509Certificate | None
+    client_cert: X509Certificate | None
+    client_cert_name: str | None
+    client_cert_error: str | None
+
+
 class HTTPScope(TypedDict):
     type: Literal["http"]
     asgi: ASGIVersions

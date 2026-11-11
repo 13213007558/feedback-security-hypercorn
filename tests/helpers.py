@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ssl
 from collections.abc import Callable
 from copy import deepcopy
 from json import dumps
@@ -19,6 +20,22 @@ class MockSocket:
 
     def getpeername(self) -> tuple[str, int]:
         return ("127.0.0.1", 80)
+
+
+class MockSSLObject:
+    def __init__(self, verify_mode: ssl.VerifyMode = ssl.CERT_NONE) -> None:
+        self._context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        self._context.verify_mode = verify_mode
+
+    def selected_alpn_protocol(self) -> str:
+        return "h2"
+
+    def getpeercert(self, binary_form: bool = False) -> None:
+        return None
+
+    @property
+    def context(self) -> ssl.SSLContext:
+        return self._context
 
 
 async def empty_framework(scope: Scope, receive: Callable, send: Callable) -> None:

@@ -116,3 +116,49 @@ async def test_protocol_keep_alive_max_requests() -> None:
     protocol.send.assert_awaited()  # type: ignore
     events = client.receive_data(protocol.send.call_args_list[1].args[0].data)  # type: ignore
     assert isinstance(events[-1], ConnectionTerminated)
+
+
+@pytest.mark.asyncio
+async def test_multiplexed_streams_share_connection_tls_extension() -> None:
+    tls_extension = {
+        "tls": True,
+        "client_cert": b"0\x82der",
+        "client_cert_name": "CN=client-001,O=Hypercorn Clients,C=UK",
+    }
+    protocol = H2Protocol(
+        Mock(),
+        Config(),
+        WorkerContext(None),
+        AsyncMock(),
+        ConnectionState({}),
+        True,
+        None,
+        None,
+        AsyncMock(),
+        tls_extension,
+    )
+    client = H2Connection()
+    client.initiate_connection()
+    for stream_id in (1, 3):
+        client.send_headers(
+            stream_id,
+            [
+                (":method", "GET"),
+                (":path", f"/{stream_id}"),
+                (":authority", "hypercorn"),
+                (":scheme", "https"),
+                # A forged header must never alter the transport-derived data.
+                (b"x-ssl-client-cert", b"CN=forged"),
+            ],
+            end_stream=True,
+        )
+    await protocol.handle(RawData(data=client.data_to_send()))
+
+    scopes = [
+        call_args[0][2]
+        for call_args in protocol.task_group.spawn_app.call_args_list  # type: ignore
+    ]
+    assert len(scopes) == 2
+    for scope in scopes:
+        assert scope["extensions"]["tls"] is tls_extension
+        assert scope["scheme"] == "https"

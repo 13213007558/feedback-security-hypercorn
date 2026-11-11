@@ -21,11 +21,13 @@ from wsproto.handshake import server_extensions_handshake, WEBSOCKET_VERSION
 from wsproto.utilities import generate_accept_token, LocalProtocolError, split_comma_header
 
 from .events import Body, Data, EndBody, EndData, Event, Request, Response, StreamClosed
+from .tls import no_tls_extension
 from ..config import Config
 from ..typing import (
     AppWrapper,
     ASGISendEvent,
     TaskGroup,
+    TLSExtension,
     WebsocketAcceptEvent,
     WebsocketResponseBodyEvent,
     WebsocketResponseStartEvent,
@@ -174,6 +176,7 @@ class WSStream:
         server: tuple[str, int] | None,
         send: Callable[[Event], Awaitable[None]],
         stream_id: int,
+        tls_extension: TLSExtension | None = None,
     ) -> None:
         self.app = app
         self.app_put: Callable | None = None
@@ -192,6 +195,7 @@ class WSStream:
         self.start_time: float
         self.state = ASGIWebsocketState.HANDSHAKE
         self.stream_id = stream_id
+        self.tls_extension = tls_extension if tls_extension is not None else no_tls_extension()
 
         self.connection: Connection
         self.handshake: Handshake
@@ -221,7 +225,7 @@ class WSStream:
                 "server": self.server,
                 "state": event.state.copy(),  # type: ignore[typeddict-item]
                 "subprotocols": self.handshake.subprotocols or [],
-                "extensions": {"websocket.http.response": {}},
+                "extensions": {"websocket.http.response": {}, "tls": self.tls_extension},
             }
 
             if not valid_server_name(self.config, event):

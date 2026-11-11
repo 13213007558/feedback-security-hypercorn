@@ -13,7 +13,7 @@ from hypercorn.app_wrappers import ASGIWrapper
 from hypercorn.config import Config
 from hypercorn.trio.tcp_server import TCPServer
 from hypercorn.trio.worker_context import WorkerContext
-from ..helpers import MockSocket, SANITY_BODY, sanity_framework
+from ..helpers import MockSocket, MockSSLObject, SANITY_BODY, sanity_framework
 
 
 @pytest.mark.trio
@@ -105,6 +105,7 @@ async def test_http2_request(nursery: trio._core._run.Nursery) -> None:
     server_stream.transport_stream = Mock(return_value=PropertyMock(return_value=MockSocket()))
     server_stream.do_handshake = AsyncMock()  # type: ignore[method-assign]
     server_stream.selected_alpn_protocol = Mock(return_value="h2")
+    server_stream.ssl_object = MockSSLObject()  # type: ignore[attr-defined]
     server = TCPServer(
         ASGIWrapper(sanity_framework), Config(), WorkerContext(None), {}, server_stream
     )
@@ -163,6 +164,7 @@ async def test_http2_websocket(nursery: trio._core._run.Nursery) -> None:
     server_stream.transport_stream = Mock(return_value=PropertyMock(return_value=MockSocket()))
     server_stream.do_handshake = AsyncMock()  # type: ignore[method-assign]
     server_stream.selected_alpn_protocol = Mock(return_value="h2")
+    server_stream.ssl_object = MockSSLObject()  # type: ignore[attr-defined]
     server = TCPServer(
         ASGIWrapper(sanity_framework), Config(), WorkerContext(None), {}, server_stream
     )

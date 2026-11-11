@@ -195,7 +195,7 @@ async def test_handle_request(stream: WSStream) -> None:
         "client": None,
         "server": None,
         "subprotocols": [],
-        "extensions": {"websocket.http.response": {}},
+        "extensions": {"websocket.http.response": {}, "tls": {"tls": False}},
         "state": ConnectionState({}),
     }
 

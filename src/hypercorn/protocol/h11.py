@@ -18,10 +18,18 @@ from .events import (
     StreamClosed,
 )
 from .http_stream import HTTPStream
+from .tls import no_tls_extension
 from .ws_stream import WSStream
 from ..config import Config
 from ..events import Closed, Event, RawData, Updated
-from ..typing import AppWrapper, ConnectionState, H11SendableEvent, TaskGroup, WorkerContext
+from ..typing import (
+    AppWrapper,
+    ConnectionState,
+    H11SendableEvent,
+    TaskGroup,
+    TLSExtension,
+    WorkerContext,
+)
 
 STREAM_ID = 1
 
@@ -90,6 +98,7 @@ class H11Protocol:
         client: tuple[str, int] | None,
         server: tuple[str, int] | None,
         send: Callable[[Event], Awaitable[None]],
+        tls_extension: TLSExtension | None = None,
     ) -> None:
         self.app = app
         self.can_read = context.event_class()
@@ -103,6 +112,7 @@ class H11Protocol:
         self.send = send
         self.server = server
         self.ssl = ssl
+        self.tls_extension = tls_extension if tls_extension is not None else no_tls_extension()
         self.stream: HTTPStream | WSStream | None = None
         self.task_group = task_group
         self.connection_state = connection_state
@@ -212,6 +222,7 @@ class H11Protocol:
                 self.server,
                 self.stream_send,
                 STREAM_ID,
+                self.tls_extension,
             )
             self.connection = H11WSConnection(cast(h11.Connection, self.connection))
         else:
@@ -225,6 +236,7 @@ class H11Protocol:
                 self.server,
                 self.stream_send,
                 STREAM_ID,
+                self.tls_extension,
             )
 
         if self.config.h11_pass_raw_headers:

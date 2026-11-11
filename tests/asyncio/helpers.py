@@ -2,12 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from ..helpers import MockSocket
+from ..helpers import MockSocket, MockSSLObject
 
-
-class MockSSLObject:
-    def selected_alpn_protocol(self) -> str:
-        return "h2"
+__all__ = ["MockSocket", "MockSSLObject", "MemoryReader", "MemoryWriter"]
 
 
 class MemoryReader:

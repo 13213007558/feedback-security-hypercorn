@@ -21,10 +21,18 @@ from .events import (
     Trailers,
 )
 from .http_stream import HTTPStream
+from .tls import no_tls_extension
 from .ws_stream import WSStream
 from ..config import Config
 from ..events import Closed, Event, RawData, Updated
-from ..typing import AppWrapper, ConnectionState, Event as IOEvent, TaskGroup, WorkerContext
+from ..typing import (
+    AppWrapper,
+    ConnectionState,
+    Event as IOEvent,
+    TaskGroup,
+    TLSExtension,
+    WorkerContext,
+)
 from ..utils import filter_pseudo_headers
 
 BUFFER_HIGH_WATER = 2 * 2**14  # Twice the default max frame size (two frames worth)
@@ -90,6 +98,7 @@ class H2Protocol:
         client: tuple[str, int] | None,
         server: tuple[str, int] | None,
         send: Callable[[Event], Awaitable[None]],
+        tls_extension: TLSExtension | None = None,
     ) -> None:
         self.app = app
         self.client = client
@@ -116,6 +125,7 @@ class H2Protocol:
         self.send = send
         self.server = server
         self.ssl = ssl
+        self.tls_extension = tls_extension if tls_extension is not None else no_tls_extension()
         self.streams: dict[int, HTTPStream | WSStream] = {}
         # The below are used by the sending task
         self.has_data = self.context.event_class()
@@ -334,6 +344,7 @@ class H2Protocol:
                 self.server,
                 self.stream_send,
                 request.stream_id,
+                self.tls_extension,
             )
         else:
             self.streams[request.stream_id] = HTTPStream(
@@ -346,6 +357,7 @@ class H2Protocol:
                 self.server,
                 self.stream_send,
                 request.stream_id,
+                self.tls_extension,
             )
         self.stream_buffers[request.stream_id] = StreamBuffer(self.context.event_class)
         try:

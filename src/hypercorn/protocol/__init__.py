@@ -4,9 +4,10 @@ from collections.abc import Awaitable, Callable
 
 from .h2 import H2Protocol
 from .h11 import H2CProtocolRequiredError, H2ProtocolAssumedError, H11Protocol
+from .tls import no_tls_extension
 from ..config import Config
 from ..events import Event, RawData
-from ..typing import AppWrapper, ConnectionState, TaskGroup, WorkerContext
+from ..typing import AppWrapper, ConnectionState, TaskGroup, TLSExtension, WorkerContext
 
 
 class ProtocolWrapper:
@@ -22,6 +23,7 @@ class ProtocolWrapper:
         server: tuple[str, int] | None,
         send: Callable[[Event], Awaitable[None]],
         alpn_protocol: str | None = None,
+        tls_extension: TLSExtension | None = None,
     ) -> None:
         self.app = app
         self.config = config
@@ -32,6 +34,7 @@ class ProtocolWrapper:
         self.server = server
         self.send = send
         self.state = state
+        self.tls_extension = tls_extension if tls_extension is not None else no_tls_extension()
         self.protocol: H11Protocol | H2Protocol
         if alpn_protocol == "h2":
             self.protocol = H2Protocol(
@@ -44,6 +47,7 @@ class ProtocolWrapper:
                 self.client,
                 self.server,
                 self.send,
+                self.tls_extension,
             )
         else:
             self.protocol = H11Protocol(
@@ -56,6 +60,7 @@ class ProtocolWrapper:
                 self.client,
                 self.server,
                 self.send,
+                self.tls_extension,
             )
 
     async def initiate(self) -> None:
@@ -75,6 +80,7 @@ class ProtocolWrapper:
                 self.client,
                 self.server,
                 self.send,
+                self.tls_extension,
             )
             await self.protocol.initiate()
             if error.data != b"":
@@ -90,6 +96,7 @@ class ProtocolWrapper:
                 self.client,
                 self.server,
                 self.send,
+                self.tls_extension,
             )
             await self.protocol.initiate(error.headers, error.settings)
             if error.data != b"":

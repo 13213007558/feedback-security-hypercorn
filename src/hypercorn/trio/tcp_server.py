@@ -11,7 +11,8 @@ from .worker_context import TrioSingleTask, WorkerContext
 from ..config import Config
 from ..events import Closed, Event, RawData, Updated
 from ..protocol import ProtocolWrapper
-from ..typing import AppWrapper, ConnectionState, LifespanState
+from ..protocol.tls import build_tls_extension, no_tls_extension
+from ..typing import AppWrapper, ConnectionState, LifespanState, TLSExtension
 from ..utils import parse_socket_addr
 
 MAX_RECV = 2**16
@@ -48,10 +49,12 @@ class TCPServer:
             alpn_protocol = self.stream.selected_alpn_protocol()
             socket = self.stream.transport_stream.socket
             ssl = True
+            tls_extension: TLSExtension = build_tls_extension(self.stream.ssl_object)
         except AttributeError:  # Not SSL
             alpn_protocol = "http/1.1"
             socket = self.stream.socket
             ssl = False
+            tls_extension = no_tls_extension()
 
         try:
             client = parse_socket_addr(socket.family, socket.getpeername())
@@ -70,6 +73,7 @@ class TCPServer:
                     server,
                     self.protocol_send,
                     alpn_protocol,
+                    tls_extension,
                 )
                 await self.protocol.initiate()
                 await self.idle_task.restart(self._task_group, self._idle_timeout)

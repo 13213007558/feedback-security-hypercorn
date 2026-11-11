@@ -67,7 +67,7 @@ async def test_handle_request_http_1(stream: HTTPStream, http_version: str) -> N
         "headers": [],
         "client": None,
         "server": None,
-        "extensions": {},
+        "extensions": {"tls": {"tls": False}},
         "state": ConnectionState({}),
     }
 
@@ -103,6 +103,7 @@ async def test_handle_request_http_2(stream: HTTPStream) -> None:
             "http.response.trailers": {},
             "http.response.early_hint": {},
             "http.response.push": {},
+            "tls": {"tls": False},
         },
         "state": ConnectionState({}),
     }

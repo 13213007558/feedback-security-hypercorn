@@ -7,6 +7,7 @@ How to guides
 
    api_usage.rst
    binds.rst
+   client_certificates.rst
    configuring.rst
    dispatch_apps.rst
    http_https_redirect.rst
