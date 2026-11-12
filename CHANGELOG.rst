@@ -1,3 +1,12 @@
+Unreleased
+----------
+
+* Add a ``lifespan`` config option and ``--lifespan`` argument. The new
+  ``required`` value makes a worker fail startup (before serving any
+  request) when the app rejects the Lifespan protocol, returns without
+  acknowledging startup, reports ``lifespan.startup.failed``, or times out.
+  The default ``auto`` value preserves the previous behaviour.
+
 0.18.0 2025-11-08
 -----------------
 

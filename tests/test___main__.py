@@ -47,6 +47,7 @@ def test_load_config(monkeypatch: MonkeyPatch) -> None:
         ("--worker-class", "trio", "worker_class"),
         ("--keep-alive", 20, "keep_alive_timeout"),
         ("--keyfile", "/path", "keyfile"),
+        ("--lifespan", "required", "lifespan"),
         ("--pid", "/path", "pid_path"),
         ("--root-path", "/path", "root_path"),
         ("--workers", 2, "workers"),
@@ -83,3 +84,9 @@ def test_verify_mode_conversion(monkeypatch: MonkeyPatch) -> None:
 
     hypercorn.__main__.main(["--verify-mode", "CERT_REQUIRED", "asgi:App"])
     run_multiple.assert_called()
+
+
+def test_lifespan_invalid_choice(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setattr(hypercorn.__main__, "run", Mock())
+    with pytest.raises(SystemExit):
+        hypercorn.__main__.main(["--lifespan", "on", "asgi:App"])

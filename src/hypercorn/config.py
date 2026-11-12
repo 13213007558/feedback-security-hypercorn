@@ -89,6 +89,7 @@ class Config:
     keep_alive_max_requests = 1000
     keyfile: str | None = None
     keyfile_password: str | None = None
+    _lifespan: str = "auto"
     logconfig: str | None = None
     logconfig_dict: dict | None = None
     logger_class = Logger
@@ -166,6 +167,16 @@ class Config:
     @root_path.setter
     def root_path(self, value: str) -> None:
         self._root_path = value.rstrip("/")
+
+    @property
+    def lifespan(self) -> str:
+        return self._lifespan
+
+    @lifespan.setter
+    def lifespan(self, value: str) -> None:
+        if value not in {"auto", "required"}:
+            raise ValueError("Lifespan must be either 'auto' or 'required'")
+        self._lifespan = value
 
     def create_ssl_context(self) -> SSLContext | None:
         if not self.ssl_enabled:

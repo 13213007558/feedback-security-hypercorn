@@ -6,7 +6,7 @@ import trio
 
 from ..config import Config
 from ..typing import AppWrapper, ASGIReceiveEvent, ASGISendEvent, LifespanScope, LifespanState
-from ..utils import LifespanFailureError, LifespanTimeoutError
+from ..utils import LifespanFailureError, LifespanTimeoutError, LifespanUnsupportedError
 
 if sys.version_info < (3, 11):
     from exceptiongroup import BaseExceptionGroup
@@ -27,6 +27,8 @@ class Lifespan:
         ](config.max_app_queue_size)
         self.state = state
         self.supported = True
+        self.startup_acknowledged = False
+        self.lifespan_failure: BaseException | None = None
 
     async def handle_lifespan(
         self, *, task_status: trio.TaskStatus = trio.TASK_STATUS_IGNORED
@@ -55,9 +57,15 @@ class Lifespan:
 
             self.supported = False
             if not self.startup.is_set():
-                await self.config.log.warning(
-                    "ASGI Framework Lifespan error, continuing without Lifespan support"
-                )
+                if self.config.lifespan == "required":
+                    await self.config.log.error(
+                        "ASGI Framework Lifespan error, the worker will fail as Lifespan is "
+                        "configured as 'required'"
+                    )
+                else:
+                    await self.config.log.warning(
+                        "ASGI Framework Lifespan error, continuing without Lifespan support"
+                    )
             elif not self.shutdown.is_set():
                 await self.config.log.exception(
                     "ASGI Framework Lifespan error, shutdown without Lifespan support"
@@ -71,7 +79,12 @@ class Lifespan:
             await self.app_receive_channel.aclose()
 
     async def wait_for_startup(self) -> None:
-        if not self.supported:
+        if self.config.lifespan == "required":
+            if self.lifespan_failure is not None:
+                raise self.lifespan_failure
+            if not self.supported:
+                raise LifespanUnsupportedError()
+        elif not self.supported:
             return
 
         await self.app_send_channel.send({"type": "lifespan.startup"})
@@ -80,6 +93,14 @@ class Lifespan:
                 await self.startup.wait()
         except trio.TooSlowError as error:
             raise LifespanTimeoutError("startup") from error
+
+        if self.config.lifespan == "required":
+            if self.lifespan_failure is not None:
+                raise self.lifespan_failure
+            if not self.supported or not self.startup_acknowledged:
+                raise LifespanUnsupportedError()
+        elif not self.supported:
+            return
 
     async def wait_for_shutdown(self) -> None:
         if not self.supported:
@@ -97,12 +118,15 @@ class Lifespan:
 
     async def asgi_send(self, message: ASGISendEvent) -> None:
         if message["type"] == "lifespan.startup.complete":
+            self.startup_acknowledged = True
             self.startup.set()
         elif message["type"] == "lifespan.shutdown.complete":
             self.shutdown.set()
         elif message["type"] == "lifespan.startup.failed":
-            raise LifespanFailureError("startup", message.get("message", ""))
+            self.lifespan_failure = LifespanFailureError("startup", message.get("message", ""))
+            raise self.lifespan_failure
         elif message["type"] == "lifespan.shutdown.failed":
-            raise LifespanFailureError("shutdown", message.get("message", ""))
+            self.lifespan_failure = LifespanFailureError("shutdown", message.get("message", ""))
+            raise self.lifespan_failure
         else:
             raise UnexpectedMessageError(message["type"])

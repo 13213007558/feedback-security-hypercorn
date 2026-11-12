@@ -36,6 +36,67 @@ class SlowLifespanFramework:
         await self.sleep(self.delay)
 
 
+async def raising_lifespan_app(scope: Scope, receive: Callable, send: Callable) -> None:
+    raise RuntimeError("Lifespan rejected on purpose")
+
+
+async def early_return_lifespan_app(scope: Scope, receive: Callable, send: Callable) -> None:
+    return
+
+
+async def startup_failed_lifespan_app(
+    scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
+) -> None:
+    if scope["type"] != "lifespan":
+        return
+    while True:
+        message = await receive()
+        if message["type"] == "lifespan.startup":
+            await send({"type": "lifespan.startup.failed", "message": "boom"})
+        break
+
+
+class SlowStartupLifespanFramework:
+    def __init__(self, delay: float, sleep: Callable) -> None:
+        self.delay = delay
+        self.sleep = sleep
+
+    async def __call__(
+        self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
+    ) -> None:
+        if scope["type"] != "lifespan":
+            return
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                await self.sleep(self.delay)
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                await send({"type": "lifespan.shutdown.complete"})
+                return
+
+
+class WorkingLifespanFramework:
+    def __init__(self) -> None:
+        self.started = False
+        self.shutdown = False
+
+    async def __call__(
+        self, scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
+    ) -> None:
+        if scope["type"] != "lifespan":
+            return
+        while True:
+            message = await receive()
+            if message["type"] == "lifespan.startup":
+                self.started = True
+                await send({"type": "lifespan.startup.complete"})
+            elif message["type"] == "lifespan.shutdown":
+                self.shutdown = True
+                await send({"type": "lifespan.shutdown.complete"})
+                return
+
+
 async def echo_framework(
     input_scope: Scope, receive: ASGIReceiveCallable, send: ASGISendCallable
 ) -> None:

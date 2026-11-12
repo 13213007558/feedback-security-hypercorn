@@ -12,8 +12,15 @@ from hypercorn.app_wrappers import ASGIWrapper
 from hypercorn.config import Config
 from hypercorn.trio.lifespan import Lifespan
 from hypercorn.typing import ASGIReceiveCallable, ASGISendCallable, Scope
-from hypercorn.utils import LifespanFailureError, LifespanTimeoutError
-from ..helpers import SlowLifespanFramework
+from hypercorn.utils import LifespanFailureError, LifespanTimeoutError, LifespanUnsupportedError
+from ..helpers import (
+    early_return_lifespan_app,
+    raising_lifespan_app,
+    SlowLifespanFramework,
+    SlowStartupLifespanFramework,
+    startup_failed_lifespan_app,
+    WorkingLifespanFramework,
+)
 
 
 @pytest.mark.trio
@@ -47,3 +54,82 @@ async def test_startup_failure() -> None:
             await lifespan.wait_for_startup()
     except ExceptionGroup as error:
         assert error.subgroup(LifespanFailureError) is not None
+
+
+def _required_config() -> Config:
+    config = Config()
+    config.lifespan = "required"
+    return config
+
+
+def _assert_contains(exc: BaseException, expected: type[BaseException]) -> None:
+    if isinstance(exc, ExceptionGroup):
+        assert exc.subgroup(expected) is not None
+    else:
+        assert isinstance(exc, expected)
+
+
+@pytest.mark.trio
+async def test_required_rejects_unsupported_app() -> None:
+    lifespan = Lifespan(ASGIWrapper(raising_lifespan_app), _required_config(), {})
+    with pytest.raises(BaseException) as exc_info:
+        async with trio.open_nursery() as nursery:
+            nursery.start_soon(lifespan.handle_lifespan)
+            await lifespan.wait_for_startup()
+    _assert_contains(exc_info.value, LifespanUnsupportedError)
+
+
+@pytest.mark.trio
+async def test_required_rejects_early_return() -> None:
+    lifespan = Lifespan(ASGIWrapper(early_return_lifespan_app), _required_config(), {})
+    with pytest.raises(BaseException) as exc_info:
+        async with trio.open_nursery() as nursery:
+            nursery.start_soon(lifespan.handle_lifespan)
+            await lifespan.wait_for_startup()
+    _assert_contains(exc_info.value, LifespanUnsupportedError)
+
+
+@pytest.mark.trio
+async def test_required_rejects_startup_failed() -> None:
+    lifespan = Lifespan(ASGIWrapper(startup_failed_lifespan_app), _required_config(), {})
+    with pytest.raises(BaseException) as exc_info:
+        async with trio.open_nursery() as nursery:
+            nursery.start_soon(lifespan.handle_lifespan)
+            await lifespan.wait_for_startup()
+    _assert_contains(exc_info.value, LifespanFailureError)
+
+
+@pytest.mark.trio
+async def test_required_rejects_startup_timeout() -> None:
+    config = _required_config()
+    config.startup_timeout = 0.01
+    lifespan = Lifespan(
+        ASGIWrapper(SlowStartupLifespanFramework(0.02, trio.sleep)), config, {}
+    )
+    with pytest.raises(BaseException) as exc_info:
+        async with trio.open_nursery() as nursery:
+            nursery.start_soon(lifespan.handle_lifespan)
+            await lifespan.wait_for_startup()
+    _assert_contains(exc_info.value, LifespanTimeoutError)
+
+
+@pytest.mark.trio
+async def test_required_allows_supported_app() -> None:
+    framework = WorkingLifespanFramework()
+    lifespan = Lifespan(ASGIWrapper(framework), _required_config(), {})
+    async with trio.open_nursery() as nursery:
+        nursery.start_soon(lifespan.handle_lifespan)
+        await lifespan.wait_for_startup()
+        assert framework.started
+        await lifespan.wait_for_shutdown()
+        assert framework.shutdown
+
+
+@pytest.mark.trio
+async def test_auto_still_continues_without_lifespan() -> None:
+    lifespan = Lifespan(ASGIWrapper(raising_lifespan_app), Config(), {})
+    async with trio.open_nursery() as nursery:
+        nursery.start_soon(lifespan.handle_lifespan)
+        await lifespan.wait_for_startup()
+        await lifespan.wait_for_shutdown()
+    assert not lifespan.supported

@@ -131,6 +131,15 @@ def main(sys_args: list[str] | None = None) -> int:
         "--keyfile-password", help="Password to decrypt the SSL key file", default=sentinel
     )
     parser.add_argument(
+        "--lifespan",
+        help="""Controls the ASGI Lifespan handling. 'auto' (the default) lets the worker
+        continue if the app does not support Lifespan; 'required' makes the worker fail
+        startup (and never serve requests) if the app rejects Lifespan, returns early,
+        reports startup.failed, or times out during startup.""",
+        choices=["auto", "required"],
+        default=sentinel,
+    )
+    parser.add_argument(
         "--insecure-bind",
         dest="insecure_binds",
         help="""The TCP host/address to bind to. SSL options will not apply to these binds.
@@ -271,6 +280,8 @@ def main(sys_args: list[str] | None = None) -> int:
         config.keyfile = args.keyfile
     if args.keyfile_password is not sentinel:
         config.keyfile_password = args.keyfile_password
+    if args.lifespan is not sentinel:
+        config.lifespan = args.lifespan
     if args.log_config is not sentinel:
         config.logconfig = args.log_config
     if args.max_requests is not sentinel:

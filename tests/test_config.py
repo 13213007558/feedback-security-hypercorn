@@ -152,3 +152,23 @@ def test_response_headers(monkeypatch: MonkeyPatch) -> None:
     ]
     config.include_server_header = False
     assert config.response_headers("test") == [(b"date", b"Sat, 02 Dec 2017 15:43:15 GMT")]
+
+
+def test_lifespan_default() -> None:
+    assert Config().lifespan == "auto"
+
+
+def test_lifespan_required() -> None:
+    config = Config()
+    config.lifespan = "required"
+    assert config.lifespan == "required"
+
+
+def test_lifespan_from_mapping() -> None:
+    assert Config.from_mapping({"lifespan": "required"}).lifespan == "required"
+
+
+def test_lifespan_invalid() -> None:
+    config = Config()
+    with pytest.raises(ValueError, match="'auto' or 'required'"):
+        config.lifespan = "on"

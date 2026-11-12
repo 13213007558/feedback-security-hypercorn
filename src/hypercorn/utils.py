@@ -40,6 +40,14 @@ class LifespanFailureError(Exception):
         super().__init__(f"Lifespan failure in {stage}. '{message}'")
 
 
+class LifespanUnsupportedError(Exception):
+    def __init__(self) -> None:
+        super().__init__(
+            "Lifespan is configured as 'required' but the application does not support the ASGI "
+            "Lifespan protocol (it raised or returned without sending a startup event)."
+        )
+
+
 class UnexpectedMessageError(Exception):
     def __init__(self, state: Enum, message_type: str) -> None:
         super().__init__(f"Unexpected message type, {message_type} given the state {state}")

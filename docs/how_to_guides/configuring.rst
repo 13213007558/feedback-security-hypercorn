@@ -67,7 +67,6 @@ can be used,
 
 Configuration options
 =====================
-
 ========================== ============================= =============================================== ========================
 Attribute                  Command line                  Purpose                                         Default
 -------------------------- ----------------------------- ----------------------------------------------- ------------------------
@@ -129,6 +128,12 @@ keep_alive_timeout         ``--keep-alive``              Seconds to keep inactiv
 keyfile                    ``--keyfile``                 Path to the SSL key file.
 keyfile_password           ``--keyfile-password``        Password for the keyfile if the keyfile is
                                                          password-protected.
+lifespan                   ``--lifespan``                Controls the ASGI Lifespan handling. ``auto`` (the       ``auto``
+                                                         default) lets the worker continue if the app does not
+                                                         support Lifespan; ``required`` makes the worker fail
+                                                         startup (and never serve requests) if the app rejects
+                                                         Lifespan, returns early, reports ``startup.failed``,
+                                                         or times out during startup.
 logconfig                  ``--log-config``              A Python logging configuration file. This       The logging ini format.
                                                          can be prefixed with 'json:' or 'toml:' to
                                                          load the configuration from a file in that
@@ -179,3 +184,40 @@ workers                    ``-w``, ``--workers``         The number of workers t
 wsgi_max_body_size         N/A                           The maximum size of a body that will be         16MiB
                                                          accepted in WSGI mode.
 ========================== ============================= =============================================== ========================
+
+Requiring Lifespan startup
+--------------------------
+
+By default (``lifespan = "auto"``) Hypercorn mirrors the ASGI guidance: if
+an application raises while handling the lifespan scope, or otherwise does
+not participate in the Lifespan protocol, a warning is logged and the worker
+keeps serving. This preserves compatibility with applications that predate
+Lifespan.
+
+For deployments where startup work (for example loading a revocation list or
+opening a connection pool) must succeed before any request is accepted, set
+the lifespan mode to ``required``:
+
+.. code-block::
+
+     hypercorn --lifespan required module:app
+
+or in a configuration file:
+
+.. code-block:: python
+
+     lifespan = "required"
+
+With ``required`` the worker fails startup — exiting non-zero before the
+listening sockets are created — whenever the application does any of the
+following during startup:
+
+- raises from the lifespan scope (rejects the Lifespan protocol),
+- returns without sending ``lifespan.startup.complete``,
+- sends ``lifespan.startup.failed``, or
+- exceeds ``startup_timeout`` without acknowledging startup.
+
+Because the failure happens before the sockets start listening, no business
+request can ever be processed by a worker whose startup failed. The meaning
+of ``auto`` and ``required`` is identical for the asyncio, uvloop and trio
+worker classes.

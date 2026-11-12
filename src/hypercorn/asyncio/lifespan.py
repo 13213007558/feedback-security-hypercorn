@@ -8,7 +8,7 @@ from typing import Any
 
 from ..config import Config
 from ..typing import AppWrapper, ASGIReceiveEvent, ASGISendEvent, LifespanScope, LifespanState
-from ..utils import LifespanFailureError, LifespanTimeoutError
+from ..utils import LifespanFailureError, LifespanTimeoutError, LifespanUnsupportedError
 
 if sys.version_info < (3, 11):
     from exceptiongroup import BaseExceptionGroup
@@ -32,6 +32,8 @@ class Lifespan:
         self.shutdown = asyncio.Event()
         self.app_queue: asyncio.Queue = asyncio.Queue(config.max_app_queue_size)
         self.supported = True
+        self.startup_acknowledged = False
+        self.lifespan_failure: BaseException | None = None
         self.loop = loop
         self.state = lifespan_state
 
@@ -70,9 +72,15 @@ class Lifespan:
 
             self.supported = False
             if not self.startup.is_set():
-                await self.config.log.warning(
-                    "ASGI Framework Lifespan error, continuing without Lifespan support"
-                )
+                if self.config.lifespan == "required":
+                    await self.config.log.error(
+                        "ASGI Framework Lifespan error, the worker will fail as Lifespan is "
+                        "configured as 'required'"
+                    )
+                else:
+                    await self.config.log.warning(
+                        "ASGI Framework Lifespan error, continuing without Lifespan support"
+                    )
             elif not self.shutdown.is_set():
                 await self.config.log.exception(
                     "ASGI Framework Lifespan error, shutdown without Lifespan support"
@@ -85,7 +93,12 @@ class Lifespan:
 
     async def wait_for_startup(self) -> None:
         await self._started.wait()
-        if not self.supported:
+        if self.config.lifespan == "required":
+            if self.lifespan_failure is not None:
+                raise self.lifespan_failure
+            if not self.supported:
+                raise LifespanUnsupportedError()
+        elif not self.supported:
             return
 
         await self.app_queue.put({"type": "lifespan.startup"})
@@ -93,6 +106,14 @@ class Lifespan:
             await asyncio.wait_for(self.startup.wait(), timeout=self.config.startup_timeout)
         except asyncio.TimeoutError as error:
             raise LifespanTimeoutError("startup") from error
+
+        if self.config.lifespan == "required":
+            if self.lifespan_failure is not None:
+                raise self.lifespan_failure
+            if not self.supported or not self.startup_acknowledged:
+                raise LifespanUnsupportedError()
+        elif not self.supported:
+            return
 
     async def wait_for_shutdown(self) -> None:
         await self._started.wait()
@@ -110,14 +131,17 @@ class Lifespan:
 
     async def asgi_send(self, message: ASGISendEvent) -> None:
         if message["type"] == "lifespan.startup.complete":
+            self.startup_acknowledged = True
             self.startup.set()
         elif message["type"] == "lifespan.shutdown.complete":
             self.shutdown.set()
         elif message["type"] == "lifespan.startup.failed":
             self.startup.set()
-            raise LifespanFailureError("startup", message.get("message", ""))
+            self.lifespan_failure = LifespanFailureError("startup", message.get("message", ""))
+            raise self.lifespan_failure
         elif message["type"] == "lifespan.shutdown.failed":
             self.shutdown.set()
-            raise LifespanFailureError("shutdown", message.get("message", ""))
+            self.lifespan_failure = LifespanFailureError("shutdown", message.get("message", ""))
+            raise self.lifespan_failure
         else:
             raise UnexpectedMessageError(message["type"])
